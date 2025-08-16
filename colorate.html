@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Color Combination Generator</title>
+  <meta name="description" content="Generate AI-ranked color palettes with style presets and accessibility checks." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media (prefers-reduced-motion: no-preference) { .fade-in { animation: fade .35s ease-out both; } }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: none;} }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <header class="sticky top-0 z-10 bg-white/80 backdrop-blur shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-xl" id="logoSwatch" style="background:#4F46E5"></div>
+        <h1 class="text-xl md:text-2xl font-bold tracking-tight">AI Color Combo Generator</h1>
+      </div>
+      <nav class="text-sm text-gray-600 flex items-center gap-4">
+        <a href="#how" class="hover:text-gray-900">How it works</a>
+        <a href="#about" class="hover:text-gray-900">About</a>
+        <button id="shareBtn" class="hidden md:inline-flex px-3 py-1.5 rounded-xl bg-gray-900 text-white hover:bg-black">Share</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <!-- Controls -->
+    <section class="bg-white rounded-2xl shadow p-4 md:p-6">
+      <div class="grid md:grid-cols-5 gap-4 items-end">
+        <div class="md:col-span-2">
+          <label class="text-sm font-medium text-gray-700">Base color</label>
+          <div class="mt-2 flex items-center gap-3">
+            <input type="color" id="colorPicker" value="#4F46E5" class="w-14 h-14 rounded border" />
+            <input type="text" id="colorHex" value="#4F46E5" class="w-36 border rounded px-3 py-2" />
+          </div>
+          <p class="text-xs text-gray-500 mt-1">Tip: Paste any HEX like <code>#0ea5e9</code></p>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium text-gray-700">Style preset</label>
+          <select id="preset" class="mt-2 w-full border rounded px-3 py-2">
+            <option value="web">Web/UI</option>
+            <option value="fashion">Fashion</option>
+            <option value="interior">Interior</option>
+            <option value="print">Print/Branding</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium text-gray-700">Harmony types</label>
+          <select id="harmonies" class="mt-2 w-full border rounded px-3 py-2" multiple size="5">
+            <option selected>Complementary</option>
+            <option selected>Triadic</option>
+            <option selected>Analogous</option>
+            <option selected>Split-Complement</option>
+            <option selected>Monochrome</option>
+          </select>
+          <p class="text-[11px] text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+        </div>
+
+        <div class="md:col-span-1 flex gap-3 md:justify-end">
+          <button id="generateBtn" class="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Generate</button>
+          <button id="downloadAll" class="hidden md:inline-flex px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200">Download PNG</button>
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center gap-4">
+        <label class="inline-flex items-center gap-2 text-sm">
+          <input id="cvdSim" type="checkbox" class="accent-indigo-600"> Simulate deuteranopia
+        </label>
+        <label class="inline-flex items-center gap-2 text-sm">
+          <input id="wcagToggle" type="checkbox" checked class="accent-indigo-600"> Show WCAG badging
+        </label>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section>
+      <div class="flex items-baseline justify-between mb-2">
+        <h2 class="text-lg font-semibold">AI-ranked palettes</h2>
+        <p id="resultInfo" class="text-sm text-gray-500"></p>
+      </div>
+      <div id="paletteContainer" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </section>
+
+    <!-- How / About -->
+    <section id="how" class="bg-white rounded-2xl shadow p-6 space-y-3">
+      <h3 class="text-lg font-semibold">How the scoring works</h3>
+      <p class="text-sm text-gray-700">Each palette is generated from classic color harmonies and ranked using an AI-inspired score built from color science features in CIE Lab:</p>
+      <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+        <li><b>ΔE average</b> (pairwise color distance): aims for a sweet spot of variety without chaos.</li>
+        <li><b>Luminance spread</b> (contrast): higher for web, moderate for interior/fashion.</li>
+        <li><b>Hue dispersion</b> (circular variance): controlled per preset.</li>
+        <li><b>Saturation balance</b>: avoids all-muted or all-neon palettes.</li>
+        <li><b>WCAG contrast</b>: palettes that enable readable text get a small bonus.</li>
+      </ul>
+    </section>
+
+    <section id="about" class="text-sm text-gray-600 px-1">
+      Built with vanilla JS + Tailwind. No backend required. Export palettes, share URLs, and tweak presets.
+    </section>
+  </main>
+
+  <template id="paletteCardTpl">
+    <div class="bg-white rounded-2xl shadow overflow-hidden fade-in">
+      <div class="p-4 flex items-center justify-between">
+        <div>
+          <h4 class="font-semibold">NAME</h4>
+          <p class="text-xs text-gray-500">score: <span class="score">0.0</span></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="wcagTag hidden text-[11px] px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">WCAG OK</span>
+          <button class="copyBtn px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm">Copy</button>
+        </div>
+      </div>
+      <div class="swatches grid grid-cols-5"></div>
+      <div class="px-4 py-3 text-xs text-gray-600 flex items-center justify-between border-t">
+        <code class="hexes truncate">#000000</code>
+        <div class="flex items-center gap-2">
+          <button class="pngBtn px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm">PNG</button>
+          <button class="svgBtn px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm">SVG</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // ---------- Color helpers ----------
+    const clampHue = (h) => (h % 360 + 360) % 360;
+    const hexToRgb = (hex) => {
+      const m = hex.replace('#','');
+      const s = m.length === 3 ? m.split('').map(c=>c+c).join('') : m;
+      const int = parseInt(s, 16);
+      return { r: (int>>16)&255, g: (int>>8)&255, b: int&255 };
+    };
+    const rgbToHex = ({r,g,b}) => '#' + [r,g,b].map(v=>Math.max(0,Math.min(255,v)).toString(16).padStart(2,'0')).join('').toUpperCase();
+    const rgbToHsl = ({r,g,b}) => {
+      r/=255; g/=255; b/=255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b);
+      let h=0,s=0,l=(max+min)/2;
+      if(max!==min){
+        const d=max-min;
+        s = l>0.5 ? d/(2-max-min) : d/(max+min);
+        switch(max){
+          case r: h=(g-b)/d + (g<b?6:0); break;
+          case g: h=(b-r)/d + 2; break;
+          default: h=(r-g)/d + 4;
+        }
+        h*=60;
+      }
+      return {h, s, l};
+    };
+    const hslToRgb = ({h,s,l}) => {
+      const C = (1 - Math.abs(2*l - 1)) * s;
+      const X = C * (1 - Math.abs(((h/60)%2) - 1));
+      const m = l - C/2;
+      let r=0,g=0,b=0;
+      if (0<=h && h<60){ r=C; g=X; }
+      else if (60<=h && h<120){ r=X; g=C; }
+      else if (120<=h && h<180){ g=C; b=X; }
+      else if (180<=h && h<240){ g=X; b=C; }
+      else if (240<=h && h<300){ r=X; b=C; }
+      else { r=C; b=X; }
+      return { r:Math.round((r+m)*255), g:Math.round((g+m)*255), b:Math.round((b+m)*255) };
+    };
+
+    // sRGB -> Lab (approx D65)
+    const _lin = (u)=>{ u/=255; return u<=0.04045? u/12.92 : Math.pow((u+0.055)/1.055,2.4); };
+    const rgbToLab = ({r,g,b}) => {
+      const R=_lin(r), G=_lin(g), B=_lin(b);
+      const X = R*0.4124 + G*0.3576 + B*0.1805;
+      const Y = R*0.2126 + G*0.7152 + B*0.0722;
+      const Z = R*0.0193 + G*0.1192 + B*0.9505;
+      const xr=X/0.95047, yr=Y/1.0, zr=Z/1.08883;
+      const f=(t)=> t>0.008856? Math.cbrt(t) : (7.787*t + 16/116);
+      const fx=f(xr), fy=f(yr), fz=f(zr);
+      return { L:116*fy-16, a:500*(fx-fy), b:200*(fy-fz) };
+    };
+    const deltaE = (c1,c2)=>{
+      const dL=c1.L-c2.L, da=c1.a-c2.a, db=c1.b-c2.b;
+      return Math.sqrt(dL*dL+da*da+db*db);
+    };
+
+    // WCAG contrast ratio for white/black text against background color
+    const _relL = ({r,g,b}) => {
+      const lin = (v)=>{ v/=255; return v<=0.03928? v/12.92 : Math.pow((v+0.055)/1.055,2.4); };
+      const R=lin(r), G=lin(g), B=lin(b);
+      return 0.2126*R + 0.7152*G + 0.0722*B;
+    };
+    const contrastRatio = (bgRgb, textRgb) => {
+      const L1=_relL(bgRgb), L2=_relL(textRgb);
+      const lighter=Math.max(L1,L2), darker=Math.min(L1,L2);
+      return (lighter+0.05)/(darker+0.05);
+    };
+
+    // Deuteranopia simulation (simple matrix approximation)
+    const simulateDeuter = ({r,g,b})=>{
+      // Brettel et al. simple approx
+      const R = 0.625*r + 0.375*g + 0*b;
+      const G = 0.7*r + 0.3*g + 0*b;
+      const B = 0*r + 0.3*g + 0.7*b;
+      return { r:Math.round(R), g:Math.round(G), b:Math.round(B) };
+    };
+
+    // ---------- Palette generation ----------
+    const makeColor = (h,s,l)=> rgbToHex(hslToRgb({h:clampHue(h),s,l}));
+
+    function makeHarmonies(baseHex, selected) {
+      const baseRgb = hexToRgb(baseHex);
+      const baseHsl = rgbToHsl(baseRgb);
+      const H=baseHsl.h, S=baseHsl.s, L=baseHsl.l;
+
+      const harm = [];
+      const add = (name, colors)=> harm.push({ name, colors });
+
+      if (selected.includes('Complementary')) {
+        add('Complementary', [ baseHex, makeColor(H+180,S,L), makeColor(H+180,S*0.7,0.6), makeColor(H,S*0.75,0.42), makeColor(H,S*1.05,0.72) ]);
+      }
+      if (selected.includes('Triadic')) {
+        add('Triadic', [ baseHex, makeColor(H+120,S,L), makeColor(H-120,S,L), makeColor(H+120,S*0.85,0.6), makeColor(H-120,S*0.85,0.45) ]);
+      }
+      if (selected.includes('Analogous')) {
+        add('Analogous', [ makeColor(H-30,S,L*0.95), baseHex, makeColor(H+30,S,L*1.05), makeColor(H-60,S*0.9,0.55), makeColor(H+60,S*0.9,0.45) ]);
+      }
+      if (selected.includes('Split-Complement')) {
+        add('Split-Complement', [ baseHex, makeColor(H+150,S,L), makeColor(H-150,S,L), makeColor(H+150,S*0.8,0.6), makeColor(H-150,S*0.8,0.4) ]);
+      }
+      if (selected.includes('Monochrome')) {
+        const cols=[]; for (let i=-2;i<=2;i++) cols.push(makeColor(H,S,Math.min(0.95,Math.max(0.05,L + i*0.1))));
+        add('Monochrome', cols);
+      }
+      return harm;
+    }
+
+    // ---------- Feature engineering ----------
+    function features(hexes){
+      const rgbs = hexes.map(hexToRgb);
+      const labs = rgbs.map(rgbToLab);
+      // ΔE stats
+      let sum=0, cnt=0; const dels=[]; const Ls=[]; const sats=[]; const hues=[];
+      for (let i=0;i<labs.length;i++){
+        Ls.push(labs[i].L);
+        const hsl = rgbToHsl(rgbs[i]);
+        sats.push(hsl.s);
+        hues.push(hsl.h);
+        for (let j=i+1;j<labs.length;j++){
+          const d=deltaE(labs[i], labs[j]);
+          dels.push(d); sum+=d; cnt++;
+        }
+      }
+      const avgDelta = sum/cnt;
+      const varDelta = dels.reduce((a,d)=>a+(d-avgDelta)**2,0)/dels.length;
+      const Lspread = Math.max(...Ls) - Math.min(...Ls);
+      const SatAvg = sats.reduce((a,b)=>a+b,0)/sats.length;
+      const SatStd = Math.sqrt(sats.reduce((a,b)=>a+(b-SatAvg)**2,0)/sats.length);
+      // circular hue variance
+      const rad = hues.map(h=>h*Math.PI/180);
+      const cx = rad.reduce((a,t)=>a+Math.cos(t),0)/rad.length;
+      const sy = rad.reduce((a,t)=>a+Math.sin(t),0)/rad.length;
+      const R = Math.sqrt(cx*cx + sy*sy);
+      const hueDispersion = 1 - R; // 0=clustered, 1=spread around wheel
+
+      // WCAG bonus: try white/black text, take max min-contrast among swatches
+      const white={r:255,g:255,b:255}, black={r:0,g:0,b:0};
+      let ok=0; let minPair=10;
+      for (const rgb of rgbs){
+        const cW = contrastRatio(rgb, white);
+        const cB = contrastRatio(rgb, black);
+        const best = Math.max(cW, cB);
+        if (best >= 4.5) ok++;
+        minPair = Math.min(minPair, best);
+      }
+      return { avgDelta, varDelta, Lspread, SatAvg, SatStd, hueDispersion, wcagOkRatio: ok/rgbs.length, minContrast: minPair };
+    }
+
+    // ---------- Preset targets & scoring ----------
+    const PRESETS = {
+      web:      { targetDelta:[26,40], Lspread:[35,70], hueDisp:[0.2,0.6], satAvg:[0.35,0.7], satStd:[0.05,0.35], wcagWeight: 6 },
+      fashion:  { targetDelta:[18,35], Lspread:[15,45], hueDisp:[0.1,0.5], satAvg:[0.25,0.8], satStd:[0.02,0.25], wcagWeight: 2 },
+      interior: { targetDelta:[18,32], Lspread:[18,38], hueDisp:[0.1,0.45], satAvg:[0.15,0.55], satStd:[0.02,0.22], wcagWeight: 3 },
+      print:    { targetDelta:[24,38], Lspread:[25,55], hueDisp:[0.15,0.55], satAvg:[0.25,0.7], satStd:[0.03,0.3], wcagWeight: 4 },
+    };
+
+    const fitScore = (x,[lo,hi]) => {
+      if (x<lo) return 1 - (lo-x)/lo; // taper down
+      if (x>hi) return 1 - (x-hi)/hi;
+      // inside window → 1, softly peak center
+      const mid=(lo+hi)/2; const w=(hi-lo)/2; return 1 - Math.abs(x-mid)/w*0.2;
+    };
+
+    function scorePalette(hexes, presetKey){
+      const f = features(hexes);
+      const p = PRESETS[presetKey] || PRESETS.web;
+      let s = 0;
+      s += 30 * fitScore(f.avgDelta, p.targetDelta);
+      s += 25 * fitScore(f.Lspread, p.Lspread);
+      s += 15 * fitScore(f.hueDispersion, p.hueDisp);
+      s += 15 * fitScore(f.SatAvg, p.satAvg);
+      s += 10 * fitScore(f.SatStd, p.satStd);
+      s += p.wcagWeight * f.wcagOkRatio;
+      // tiny penalty for huge delta variance (erratic palettes)
+      s -= 0.02 * f.varDelta;
+      return { score: Math.max(0, s), meta: f };
+    }
+
+    // ---------- Render ----------
+    const tpl = document.getElementById('paletteCardTpl');
+    const container = document.getElementById('paletteContainer');
+
+    function renderPalettes(items, presetKey){
+      container.innerHTML='';
+      const showWcag = document.getElementById('wcagToggle').checked;
+      items.forEach(({ name, colors, score, meta })=>{
+        const node = tpl.content.cloneNode(true);
+        node.querySelector('h4').textContent = name;
+        node.querySelector('.score').textContent = score.toFixed(1);
+        node.querySelector('.hexes').textContent = colors.join(', ');
+        const wcagTag = node.querySelector('.wcagTag');
+        if (showWcag && meta.wcagOkRatio >= 0.6 && meta.minContrast >= 4.5) wcagTag.classList.remove('hidden');
+
+        const sw = node.querySelector('.swatches');
+        sw.className = `swatches grid grid-cols-${colors.length}`;
+        colors.forEach(c=>{
+          const d = document.createElement('div');
+          d.style.background = c;
+          d.className = 'h-20 relative';
+          const t = document.createElement('span');
+          // pick black/white text for legibility
+          const rgb = hexToRgb(c);
+          const useBlack = contrastRatio(rgb, {r:0,g:0,b:0}) >= contrastRatio(rgb, {r:255,g:255,b:255});
+          t.style.color = useBlack ? '#000' : '#fff';
+          t.className = 'absolute bottom-1 left-1 text-[10px] px-1 rounded';
+          t.style.background = useBlack ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.3)';
+          t.textContent = c;
+          d.appendChild(t);
+          sw.appendChild(d);
+        });
+
+        // Copy
+        node.querySelector('.copyBtn').addEventListener('click',()=>{
+          navigator.clipboard.writeText(colors.join(', '));
+          toast('Copied HEX list');
+        });
+        // PNG/SVG export
+        node.querySelector('.pngBtn').addEventListener('click',()=>downloadPalettePNG(colors, name));
+        node.querySelector('.svgBtn').addEventListener('click',()=>downloadPaletteSVG(colors, name));
+
+        container.appendChild(node);
+      });
+
+      document.getElementById('resultInfo').textContent = `${items.length} palettes · preset: ${presetKey}`;
+    }
+
+    // ---------- Exports ----------
+    function downloadPalettePNG(colors, name){
+      const w = 1000, h = 200, sw = Math.floor(w/colors.length);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      colors.forEach((hex, i)=>{
+        ctx.fillStyle = hex; ctx.fillRect(i*sw, 0, sw, h);
+        // label
+        const rgb = hexToRgb(hex);
+        const useBlack = contrastRatio(rgb, {r:0,g:0,b:0}) >= contrastRatio(rgb, {r:255,g:255,b:255});
+        ctx.fillStyle = useBlack ? 'rgba(255,255,255,.7)' : 'rgba(0,0,0,.5)';
+        ctx.fillRect(i*sw+6, h-26, sw-12, 20);
+        ctx.fillStyle = useBlack ? '#000' : '#fff';
+        ctx.font = '12px ui-sans-serif, system-ui';
+        ctx.fillText(hex, i*sw+12, h-12);
+      });
+      const a = document.createElement('a');
+      a.download = `${name.replace(/\s+/g,'_')}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    }
+
+    function downloadPaletteSVG(colors, name){
+      const w = 1000, h = 200, sw = Math.floor(w/colors.length);
+      const rects = colors.map((c,i)=>`<rect x="${i*sw}" y="0" width="${sw}" height="${h}" fill="${c}"/>`).join('');
+      const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${rects}</svg>`;
+      const blob = new Blob([svg], {type:'image/svg+xml'});
+      const a = document.createElement('a');
+      a.download = `${name.replace(/\s+/g,'_')}.svg`;
+      a.href = URL.createObjectURL(blob);
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    }
+
+    // ---------- Toast ----------
+    function toast(msg){
+      const d = document.createElement('div');
+      d.textContent = msg;
+      d.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg bg-gray-900 text-white text-sm shadow';
+      document.body.appendChild(d);
+      setTimeout(()=>d.remove(), 1400);
+    }
+
+    // ---------- URL params (shareable) ----------
+    function updateURL(hash){ history.replaceState(null, '', hash); }
+    function readParams(){
+      const p = new URLSearchParams(location.search);
+      return { c: p.get('c') || '#4F46E5', preset: p.get('p') || 'web', harms: (p.get('h')||'Complementary,Triadic,Analogous,Split-Complement,Monochrome').split(',') };
+    }
+
+    // ---------- Main flow ----------
+    function generate(){
+      const hex = document.getElementById('colorHex').value.trim();
+      const preset = document.getElementById('preset').value;
+      const harmsSel = Array.from(document.getElementById('harmonies').selectedOptions).map(o=>o.value);
+
+      // update URL for sharing
+      const qp = new URLSearchParams({ c: hex, p: preset, h: harmsSel.join(',') });
+      updateURL(`?${qp.toString()}`);
+      document.getElementById('logoSwatch').style.background = hex;
+
+      let harmonies = makeHarmonies(hex, harmsSel);
+
+      // CVD simulation if enabled
+      if (document.getElementById('cvdSim').checked){
+        harmonies = harmonies.map(h=>({
+          name: h.name + ' (CVD sim)',
+          colors: h.colors.map(x=>{ const r=simulateDeuter(hexToRgb(x)); return rgbToHex(r); })
+        }));
+      }
+
+      const scored = harmonies.map(h=>{
+        const res = scorePalette(h.colors, preset);
+        return { ...h, score: res.score, meta: res.meta };
+      }).sort((a,b)=> b.score - a.score);
+
+      renderPalettes(scored, preset);
+    }
+
+    // ---------- Event wiring ----------
+    const colorPicker = document.getElementById('colorPicker');
+    const colorHex = document.getElementById('colorHex');
+
+    colorPicker.addEventListener('input', e=>{ colorHex.value = e.target.value; });
+    colorHex.addEventListener('input', e=>{ const v=e.target.value; if (/^#([0-9A-Fa-f]{3}){1,2}$/.test(v)) colorPicker.value=v; });
+
+    document.getElementById('generateBtn').addEventListener('click', generate);
+    document.getElementById('wcagToggle').addEventListener('change', generate);
+    document.getElementById('cvdSim').addEventListener('change', generate);
+
+    document.getElementById('shareBtn').addEventListener('click', async ()=>{
+      try {
+        await navigator.share({ title:'AI Color Combos', url: location.href });
+      } catch { navigator.clipboard.writeText(location.href); toast('Link copied'); }
+    });
+
+    document.getElementById('downloadAll').addEventListener('click', ()=>{
+      const cards = Array.from(document.querySelectorAll('#paletteContainer .swatches'));
+      if (!cards.length) return toast('Generate palettes first');
+      // export the top palette
+      const top = Array.from(cards[0].querySelectorAll('span')).map(s=>s.textContent);
+      downloadPalettePNG(top, 'Top_Palette');
+    });
+
+    // Initial state from URL
+    const init = readParams();
+    colorPicker.value = init.c; colorHex.value = init.c;
+    document.getElementById('preset').value = init.preset;
+    const harmsSel = document.getElementById('harmonies');
+    Array.from(harmsSel.options).forEach(o=>{ o.selected = init.harms.includes(o.value); });
+
+    // First render
+    generate();
+  </script>
+</body>
+</html>
